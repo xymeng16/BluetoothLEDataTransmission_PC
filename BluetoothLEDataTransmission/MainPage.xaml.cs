@@ -1,0 +1,70 @@
+﻿using System;
+using System.Linq;
+using System.Runtime.InteropServices.WindowsRuntime;
+using Windows.Devices.Bluetooth.GenericAttributeProfile;
+using Windows.UI.Xaml.Controls;
+
+// The Blank Page item template is documented at https://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409
+
+namespace BluetoothLEDataTransmission
+{
+    /// <summary>
+    /// An empty page that can be used on its own or navigated to within a Frame.
+    /// </summary>
+    public sealed partial class MainPage : Page
+    {
+        private GattCharacteristic characteristic;
+
+        public MainPage()
+        {
+            this.InitializeComponent();
+            //Find the devices that expose the service
+            findDevices();
+        }
+
+        private async void findDevices()
+        {
+            //var devices = await Windows.Devices.Enumeration.DeviceInformation.FindAllAsync(GattDeviceService.GetDeviceSelectorFromUuid(GattServiceUuids.GenericAccess));
+            var devices = await Windows.Devices.Enumeration.DeviceInformation.FindAllAsync(GattDeviceService.GetDeviceSelectorFromUuid(new Guid("19B10000-E8F2-537E-4F6C-D104768A1214")));
+
+            if (devices.Count == 0)
+            {
+                textBox.Text = "Devices not found!";
+                return;
+            }
+
+            //Connect to the service
+            var service = await GattDeviceService.FromIdAsync(devices[0].Id);
+            if (service == null)
+                return;
+            //Obtain the characteristic we want to interact with
+            //var characteristics = service.GetCharacteristics(GattCharacteristic.ConvertShortIdToUuid(0x2A00));
+            var characteristics = service.GetCharacteristics(new Guid("19B10001-E8F2-537E-4F6C-D104768A1214"));
+            characteristic = characteristics[0];
+            //Read the value
+            var writer = new Windows.Storage.Streams.DataWriter();
+            writer.WriteByte(12);
+            await characteristic.WriteValueAsync(writer.DetachBuffer());
+            var valueBytes = (await characteristic.ReadValueAsync()).Value.ToArray();
+            var value = await characteristic.ReadValueAsync();
+
+            //Convert to string
+            //var deviceName = System.Text.Encoding.UTF8.GetString(deviceNameBytes, 0, deviceNameBytes.Length);
+            characteristic.ValueChanged += Characteristic_ValueChanged;
+
+            await characteristic.WriteClientCharacteristicConfigurationDescriptorAsync(GattClientCharacteristicConfigurationDescriptorValue.Notify);
+
+            textBox.Text = valueBytes[0].ToString();
+        }
+
+        async private void Characteristic_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
+        {
+            var value = await sender.ReadValueAsync();
+            await Windows.ApplicationModel.Core.CoreApplication.MainView.CoreWindow.Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+             {
+                 textBox.Text = textBox.Text + (value.Value.ToArray())[0].ToString();
+             }
+            );
+        }
+    }
+}
